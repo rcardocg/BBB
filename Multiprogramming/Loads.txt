@@ -1,0 +1,16 @@
+OS base: 0x82000000
+P1 base: 0x82100000
+P2 base: 0x82200000
+
+Generated files:
+- os.bin (OS + Round-Robin P1<->P2)
+- P1/p1.bin
+- P2/p2.bin
+
+U-Boot example sequence:
+loady 0x82000000    # send os.bin
+loady 0x82100000    # send P1/p1.bin
+loady 0x82200000    # send P2/p2.bin
+go 0x82000000
+
+NOTE: Do not load P2 at 0x82000000. That overwrites the OS.
