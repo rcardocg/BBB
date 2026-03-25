@@ -14,4 +14,8 @@ typedef struct {
     proc_state_t state;
 } pcb_t;
 
+void pcb_init(pcb_t *pcb, uint32_t pid, uint32_t sp, proc_state_t state);
+void pcb_set_state(pcb_t *pcb, proc_state_t state);
+void pcb_set_sp(pcb_t *pcb, uint32_t sp);
+
 #endif

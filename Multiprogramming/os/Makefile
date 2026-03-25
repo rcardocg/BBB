@@ -17,8 +17,8 @@ all: os.bin
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-os.elf: root.o os.o linker.ld
-	$(LD) $(CFLAGS) root.o os.o $(LDFLAGS) -Wl,-Map=os.map -o $@
+os.elf: root.o os.o pcb.o linker.ld
+	$(LD) $(CFLAGS) root.o os.o pcb.o $(LDFLAGS) -Wl,-Map=os.map -o $@
 
 os.bin: os.elf
 	$(OBJCOPY) -O binary $< $@
