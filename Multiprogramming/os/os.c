@@ -1,5 +1,7 @@
 #include <stdint.h>
 
+#include "pcb.h"
+
 typedef uint32_t u32;
 
 #define MMIO32(addr) (*(volatile u32 *)(addr))
@@ -44,6 +46,12 @@ typedef uint32_t u32;
 #define P1_ENTRY      0x82100000u
 #define P2_ENTRY      0x82200000u
 #define P1_STACK_TOP  0x82112000u
+#define P2_STACK_TOP  0x82212000u
+
+#define P1_PID 1u
+#define P2_PID 2u
+#define NUM_USER_PROCS 2u
+#define INITIAL_PROC_SPSR 0x13u
 
 /* 3 seconds at 24MHz */
 #define TIMER2_RELOAD 0xFBB55E00u
@@ -52,8 +60,57 @@ typedef uint32_t u32;
 static inline void mmio_write(u32 addr, u32 value) { MMIO32(addr) = value; }
 static inline u32 mmio_read(u32 addr) { return MMIO32(addr); }
 
+static inline u32 read_cpsr(void) {
+    u32 v;
+    __asm__ volatile ("mrs %0, cpsr" : "=r"(v));
+    return v;
+}
+
+static inline void write_cpsr_c(u32 v) {
+    __asm__ volatile ("msr cpsr_c, %0" :: "r"(v) : "cc", "memory");
+}
+
 static inline void enable_irq(void) {
     __asm__ volatile ("cpsie i" ::: "memory");
+}
+
+static void read_svc_sp_lr(u32 *sp_out, u32 *lr_out) {
+    u32 old_cpsr;
+    u32 svc_cpsr;
+    u32 sp_val;
+    u32 lr_val;
+
+    old_cpsr = read_cpsr();
+    svc_cpsr = (old_cpsr & ~0x1Fu) | 0x13u | 0x80u;
+
+    write_cpsr_c(svc_cpsr);
+    __asm__ volatile (
+        "mov %0, sp\n\t"
+        "mov %1, lr\n\t"
+        : "=r"(sp_val), "=r"(lr_val)
+        :
+        : "memory");
+    write_cpsr_c(old_cpsr);
+
+    *sp_out = sp_val;
+    *lr_out = lr_val;
+}
+
+static void write_svc_sp_lr(u32 sp, u32 lr) {
+    u32 old_cpsr;
+    u32 svc_cpsr;
+
+    old_cpsr = read_cpsr();
+    svc_cpsr = (old_cpsr & ~0x1Fu) | 0x13u | 0x80u;
+
+    write_cpsr_c(svc_cpsr);
+    __asm__ volatile (
+        "mov sp, %0\n\t"
+        "mov lr, %1\n\t"
+        :
+        : "r"(sp), "r"(lr)
+        : "memory");
+    write_cpsr_c(old_cpsr);
 }
 
 static void uart_putc(char c) {
@@ -98,20 +155,44 @@ static void intc_init(void) {
     mmio_write(INTC_BASE + INTC_MIR_CLEAR2, IRQ68_MASK);
 }
 
-void timer_irq_handler(void) {
+static pcb_t g_pcbs[NUM_USER_PROCS];
+static u32 g_current_proc;
+
+static void pcb_system_init(void) {
+    pcb_init(&g_pcbs[0], P1_PID, P1_ENTRY, P1_STACK_TOP, INITIAL_PROC_SPSR, PROC_RUNNING);
+    pcb_init(&g_pcbs[1], P2_PID, P2_ENTRY, P2_STACK_TOP, INITIAL_PROC_SPSR, PROC_READY);
+    g_current_proc = 0u;
+    __asm__ volatile ("dsb\n\tisb" ::: "memory");
+}
+
+void timer_irq_handler(u32 *irq_frame) {
+    u32 svc_sp;
+    u32 svc_lr;
+    u32 next_proc;
+
     /* ACK timer + EOI so interrupts continue */
     mmio_write(DMT2_BASE + TISR, TISR_OVF_IT_FLAG);
     mmio_write(INTC_BASE + INTC_CONTROL, INTC_NEWIRQAGR);
 
-    /* Minimal marker to prove IRQ is firing */
-    uart_putc('.');
+    read_svc_sp_lr(&svc_sp, &svc_lr);
+    pcb_save_from_irq_frame(&g_pcbs[g_current_proc], irq_frame, svc_sp, svc_lr);
+    pcb_set_state(&g_pcbs[g_current_proc], PROC_READY);
+
+    next_proc = (g_current_proc + 1u) % NUM_USER_PROCS;
+
+    pcb_restore_to_irq_frame(&g_pcbs[next_proc], irq_frame, &svc_sp, &svc_lr);
+    write_svc_sp_lr(svc_sp, svc_lr);
+    pcb_set_state(&g_pcbs[next_proc], PROC_RUNNING);
+    g_current_proc = next_proc;
 }
 
 typedef void (*entry_fn_t)(void);
 
 void kmain(void) {
     disable_wdt1();
-    uart_puts("\n[OS] boot (simple)\n");
+    uart_puts("\n[OS] boot (RR)\n");
+
+    pcb_system_init();
 
     timer2_init();
     intc_init();
@@ -119,9 +200,8 @@ void kmain(void) {
 
     uart_puts("[OS] jumping to P1\n");
 
-    /* Set P1 stack (SVC mode) and jump. */
-    __asm__ volatile ("mov sp, %0" :: "r"(P1_STACK_TOP) : "memory");
-    ((entry_fn_t)(uintptr_t)P1_ENTRY)();
+    write_svc_sp_lr(g_pcbs[g_current_proc].sp, g_pcbs[g_current_proc].lr);
+    ((entry_fn_t)(uintptr_t)g_pcbs[g_current_proc].pc)();
 
     for (;;) {
     }

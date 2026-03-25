@@ -68,10 +68,15 @@ hang:
     b hang
 
 irq_handler:
-    @ Simple IRQ handler: save GPRs, call C, restore, return.
-    sub sp, sp, #56
+    @ Save r0-r12/lr_irq + spsr_irq in an IRQ frame and call C scheduler.
+    sub sp, sp, #60
     stmia sp, {r0-r12, lr}
+    mrs r0, spsr
+    str r0, [sp, #56]
+    mov r0, sp
     bl timer_irq_handler
+    ldr r0, [sp, #56]
+    msr spsr_cxsf, r0
     ldmia sp, {r0-r12, lr}
-    add sp, sp, #56
+    add sp, sp, #60
     subs pc, lr, #4
