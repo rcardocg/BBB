@@ -7,6 +7,11 @@ OBJDUMP := $(CROSS)-objdump
 CFLAGS := -mcpu=cortex-a8 -marm -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -O2
 LDFLAGS := -T linker.ld -nostdlib -nostartfiles
 
+# List of object files
+OBJS := root.o os.o pcb.o \
+        drivers/uart.o drivers/wdt.o drivers/timer.o \
+        scheduler/round_robin.o
+
 .SUFFIXES:
 
 all: os.bin
@@ -17,8 +22,8 @@ all: os.bin
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
-os.elf: root.o os.o pcb.o linker.ld
-	$(LD) $(CFLAGS) root.o os.o pcb.o $(LDFLAGS) -Wl,-Map=os.map -o $@
+os.elf: $(OBJS) linker.ld
+	$(LD) $(CFLAGS) $(OBJS) $(LDFLAGS) -Wl,-Map=os.map -o $@
 
 os.bin: os.elf
 	$(OBJCOPY) -O binary $< $@
@@ -28,5 +33,6 @@ disasm: os.elf
 
 clean:
 	rm -f *.o *.elf *.bin *.map *.dis
+	rm -f drivers/*.o scheduler/*.o
 
 .PHONY: all clean disasm

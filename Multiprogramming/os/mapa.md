@@ -1,131 +1,53 @@
-# Mapa de Funcionamiento: Sistema de Multiprogramación (Multiprogramming)
+# Mapa del Núcleo (os/os.c)
 
-Este documento describe la arquitectura, componentes y el flujo de ejecución del sistema operativo minimalista diseñado para la plataforma BeagleBone Black (ARMv7-A / Cortex-A8).
+Este archivo actúa como el orquestador principal del sistema operativo. Tras la refactorización modular, su responsabilidad se limita a la inicialización del sistema y el manejo de alto nivel de las interrupciones de hardware.
 
----
-
-## 1. Arquitectura del Sistema
-
-El sistema se divide en tres capas principales:
-1.  **Librerías (lib/):** Funciones de utilidad (I/O, strings) compartidas por el OS y los procesos.
-2.  **Núcleo (os/):** Gestión de hardware (UART, Timer, INTC), manejo de interrupciones y carga de procesos.
-3.  **Procesos de Usuario (P1, P2):** Aplicaciones independientes que corren en modo SVC (SuperVisor) en esta implementación.
-
-### Mapa de Memoria (Resumen)
-
-| Dirección | Componente | Descripción |
-| :--- | :--- | :--- |
-| `0x82000000` | **OS** | Punto de entrada del kernel (`_start`). |
-| `0x82011000` | Stack IRQ | Pila usada durante el manejo de interrupciones. |
-| `0x82012000` | Stack SVC (OS) | Pila usada por el kernel en modo Supervisor. |
-| `0x82100000` | **Proceso 1 (P1)** | Punto de entrada de la aplicación P1. |
-| `0x82112000` | Stack P1 | Pila asignada para la ejecución de P1. |
-| `0x82200000` | **Proceso 2 (P2)** | Punto de entrada de la aplicación P2. |
+## 1. Dependencias (Módulos)
+El archivo `os.c` se conecta con los siguientes componentes:
+*   `pcb.h`: Estructura de Control de Procesos para guardar/restaurar estados.
+*   `cpu.h`: Funciones de bajo nivel para manipular registros del procesador ARM.
+*   `drivers/uart.h`: Salida de texto por consola serial.
+*   `drivers/wdt.h`: Control del Watchdog Timer.
+*   `drivers/timer.h`: Configuración del DMTimer2 y el controlador de interrupciones (INTC).
+*   `scheduler/scheduler.h`: Interfaz del planificador para decidir qué proceso sigue.
 
 ---
 
-## 2. Desglose por Archivos y Componentes
-
-### 📂 Carpeta: `os/` (El Núcleo)
-
-#### `root.s` (Ensamblador de Bajo Nivel)
-Es el primer código que se ejecuta. Su función es preparar el hardware para el código C.
--   **`__vectors_start`**: Tabla de vectores de interrupción. Redirige el flujo a `irq_handler` cuando ocurre una interrupción de hardware.
--   **`_start`**:
-    1.  Desactiva interrupciones (`cpsid if`).
-    2.  Configura el **VBAR** (Vector Base Address Register) para que apunte a nuestra tabla de vectores.
-    3.  Inicializa los **Stacks** para modo IRQ y modo SVC.
-    4.  Limpia la sección **.bss** (pone a cero variables globales no inicializadas).
-    5.  Salta a `kmain`.
--   **`irq_handler`**: Captura el contexto actual (registros R0-R12 y LR), llama a la función C `timer_irq_handler` y restaura el contexto al finalizar.
-
-#### `os.c` (Lógica del Kernel)
-Gestiona la inicialización de los periféricos y el flujo de "Multiprogramación".
--   **`kmain()`**: Función principal del kernel. Inicializa el Watchdog (desactiva), UART (vía `uart_puts`), Timer2 e INTC. Luego salta a la dirección de memoria de P1 (`0x82100000`).
--   **`timer2_init()`**: Configura el reloj del sistema para generar interrupciones periódicas (actualmente configurado para dispararse cada ~100ms o 3s según el reload).
--   **`intc_init()`**: Configura el controlador de interrupciones para permitir que el IRQ 68 (Timer 2) llegue al CPU.
--   **`timer_irq_handler()`**: Función en C que se ejecuta en cada tic del reloj. Limpia el flag de interrupción y el controlador de interrupciones (EOI).
-
-#### `pcb.h` (Estructuras de Control)
-Define el **PCB (Process Control Block)**, esencial para la multiprogramación real.
--   **`pcb_t`**: Estructura que guarda:
-    -   `pid`: Identificador del proceso.
-    -   `sp`: Puntero de pila guardado (Contexto).
-    -   `state`: Estado (READY, RUNNING).
-
-#### `linker.ld`
-Define cómo se organizan las secciones de código (`.text`), datos (`.data`) y variables (`.bss`) en la RAM física.
+## 2. Variables y Tipos
+*   **`entry_fn_t` (typedef)**: Puntero a función de tipo `void(void)`. Se utiliza para castear la dirección de memoria del proceso (PC) y ejecutarlo como una función de C.
 
 ---
 
-### 📂 Carpeta: `lib/` (Librerías compartidas)
+## 3. Funciones Principales
 
-#### `print.h / print.c`
-Provee una implementación minimalista de salida por consola (UART0).
--   **`uart_putc(char c)`**: Envía un carácter al registro THR de la UART.
--   **`PRINT(const char *fmt, ...)`**: Versión simplificada de `printf`. Soporta `%d`, `%c`, `%s`.
+### `timer_irq_handler(uint32_t *irq_frame)`
+Es el corazón del **Multitasking Preemptivo**. Se ejecuta automáticamente cada vez que el temporizador genera una interrupción.
+*   **Entrada**: `irq_frame`, un puntero al marco de registros (r0-r12, lr, spsr) guardados en el stack por `root.s`.
+*   **Flujo de Conexión**:
+    1.  **ACK**: Llama a `timer_ack_interrupt()` para limpiar la bandera de interrupción y permitir que ocurran futuras interrupciones.
+    2.  **Contexto SVC**: Usa `read_svc_sp_lr()` para obtener los registros `sp` y `lr` del modo Supervisor (donde corre el proceso de usuario).
+    3.  **Guardar**: Obtiene el proceso actual mediante `scheduler_get_current_pcb()` y guarda su estado completo usando `pcb_save_from_irq_frame()`.
+    4.  **Estado**: Cambia el estado del proceso actual a `PROC_READY`.
+    5.  **Decisión**: Llama a `scheduler_next()` para que el algoritmo (Round Robin) elija el siguiente proceso.
+    6.  **Restaurar**: Obtiene el nuevo proceso, restaura sus registros en el `irq_frame` y actualiza los registros SVC reales con `write_svc_sp_lr()`.
+    7.  **Ejecución**: Al terminar la función, `root.s` usará el `irq_frame` modificado para saltar al nuevo proceso.
 
-#### `stdio.h / stdio.c`
--   **`PRINT(...)`**: Un wrapper (envoltorio) sobre la función de `print.c`.
-
----
-
-### 📂 Carpetas: `P1/` y `P2/` (Aplicaciones)
-
-#### `main.c`
--   Ejecuta un bucle infinito que imprime su nombre y un contador.
--   Utiliza la instrucción `wfi` (Wait For Interrupt) para ceder el control y esperar a la siguiente interrupción de reloj, ahorrando energía.
-
----
-
-## 3. Diagramas de Flujo
-
-### Ciclo de Vida: Desde el Boot hasta el Proceso
-
-```mermaid
-graph TD
-    A[Power On / U-Boot] --> B[os/root.s: _start]
-    B --> C[Inicializar Stacks IRQ/SVC]
-    C --> D[Llamar kmain en os.c]
-    D --> E[Init Hardware: UART, Timer, INTC]
-    E --> F[Salto manual a P1_ENTRY 0x82100000]
-    F --> G[P1/start.s: _start]
-    G --> H[P1/main.c: main]
-    H --> I[Bucle: PRINT -> WFI]
-```
-
-### Manejo de Interrupciones (IRQ)
-
-```mermaid
-sequenceDiagram
-    participant CPU as CPU (Proceso P1)
-    participant HW as Hardware (Timer2)
-    participant Vec as Tabla de Vectores (root.s)
-    participant Ker as Kernel (os.c)
-
-    Note over CPU: Ejecutando P1...
-    HW->>CPU: Señal IRQ (Timer disparado)
-    CPU->>Vec: Salto automático a irq_handler
-    Note right of Vec: Guarda R0-R12, LR en Stack IRQ
-    Vec->>Ker: llama a timer_irq_handler()
-    Ker->>Ker: Limpia Flags (ACK)
-    Ker-->>Vec: Retorno
-    Note right of Vec: Restaura R0-R12, LR
-    Vec->>CPU: subs pc, lr, #4 (Vuelve a P1)
-```
+### `kmain(void)`
+Punto de entrada del Kernel después de que `root.s` inicializa el hardware básico.
+*   **Inicialización**:
+    *   `wdt_disable()`: Evita que la placa se reinicie sola.
+    *   `scheduler_init()`: Configura la tabla de procesos (PCBs) y sus puntos de entrada (P1, P2).
+    *   `timer_init()` y `intc_init()`: Activan el "latido" del sistema.
+    *   `enable_irq()`: Habilita las interrupciones a nivel global en el CPU.
+*   **Arranque del Primer Proceso**:
+    *   Obtiene el PCB del primer proceso (P1) mediante el planificador.
+    *   Configura su Stack Pointer (`sp`) y Link Register (`lr`) iniciales.
+    *   Realiza un salto directo a su dirección de entrada (`pc`).
 
 ---
 
-## 4. Complementariedad de Componentes
-
-1.  **Ensamblador + C:** `root.s` maneja lo que C no puede (registros de estado del CPU, stacks, punteros de interrupción), mientras que `os.c` maneja la lógica de negocio y configuración de registros de periféricos complejos.
-2.  **Kernel + Librerías:** El kernel utiliza `lib/` para depuración (imprimir el estado del sistema), y los procesos la usan para comunicarse con el exterior.
-3.  **Encadenamiento de Linkers:** Cada componente (`os`, `P1`, `P2`) tiene su propio `linker.ld` que asegura que no colisionen en memoria, permitiendo que el OS sepa exactamente dónde saltar para iniciar una tarea.
-
----
-
-## 5. Conceptos para Estudio
-
--   **Context Switching (Pendiente):** Actualmente el sistema salta a P1 y se queda ahí. Para multiprogramación real, el `irq_handler` debería salvar el `sp` de P1 en su PCB, cargar el `sp` de P2, y retornar a P2.
--   **Modos del Procesador:** El sistema cambia entre modo **SVC** (Kernel y Procesos) y modo **IRQ** (Manejo de interrupciones).
--   **MMIO (Memory Mapped I/O):** Se usan direcciones de memoria (como `0x44E09000`) para hablar con el hardware (UART).
+## 4. Flujo de Control
+1.  **Arranque**: `root.s` -> `kmain()` -> P1 inicia ejecución.
+2.  **Interrupción**: El Timer llega a cero -> El CPU salta a `root.s` (vector IRQ) -> `root.s` llama a `timer_irq_handler()`.
+3.  **Cambio**: `timer_irq_handler()` decide que es turno de P2 -> Modifica el stack de retorno.
+4.  **Retorno**: `root.s` restaura registros -> El CPU ahora está ejecutando P2 en lugar de P1.
