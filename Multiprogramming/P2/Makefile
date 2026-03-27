@@ -3,29 +3,66 @@ CC := $(CROSS)-gcc
 LD := $(CROSS)-gcc
 OBJCOPY := $(CROSS)-objcopy
 
+QEMU := qemu-system-arm
+
 CFLAGS := -mcpu=cortex-a8 -marm -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -O2
-LDFLAGS := -T linker.ld -nostdlib -nostartfiles -Wl,-Map=p2.map
 
-OBJS := start.o main.o ../lib/print.o
+# Flags separados
+CFLAGS_BBB := $(CFLAGS) -DBEAGLE
+CFLAGS_QEMU := $(CFLAGS) -DQEMU
 
-all: p2.bin
+LDFLAGS_BBB := -T linker.ld -nostdlib -nostartfiles -Wl,-Map=p2_beagle.map
+LDFLAGS_QEMU := -T linker_qemu.ld -nostdlib -nostartfiles -Wl,-Map=p2_qemu.map
 
-start.o: start.s
-	$(CC) $(CFLAGS) -c $< -o $@
+# Objetos separados
+OBJS_BBB := start_bbb.o main_bbb.o print_bbb.o
+OBJS_QEMU := start_qemu.o main_qemu.o print_qemu.o
 
-main.o: main.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# ========================
+# TARGET PRINCIPAL
+# ========================
+all: p2_beagle.bin p2_qemu.bin
 
-../lib/print.o: ../lib/print.c ../lib/print.h
-	$(CC) $(CFLAGS) -c ../lib/print.c -o ../lib/print.o
+# ========================
+# COMPILACIÓN BBB
+# ========================
+start_bbb.o: start.s
+	$(CC) $(CFLAGS_BBB) -c $< -o $@
 
-p2.elf: $(OBJS) linker.ld
-	$(LD) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
+main_bbb.o: main.c
+	$(CC) $(CFLAGS_BBB) -c $< -o $@
 
-p2.bin: p2.elf
+print_bbb.o: ../lib/print.c ../lib/print.h
+	$(CC) $(CFLAGS_BBB) -c ../lib/print.c -o $@
+
+p2_beagle.elf: $(OBJS_BBB) linker.ld
+	$(LD) $(CFLAGS_BBB) $(OBJS_BBB) $(LDFLAGS_BBB) -o $@
+
+p2_beagle.bin: p2_beagle.elf
 	$(OBJCOPY) -O binary $< $@
 
-clean:
-	rm -f *.o *.elf *.bin *.map ../lib/print.o
+# ========================
+# COMPILACIÓN QEMU
+# ========================
+start_qemu.o: start.s
+	$(CC) $(CFLAGS_QEMU) -c $< -o $@
 
-.PHONY: all clean
+main_qemu.o: main.c
+	$(CC) $(CFLAGS_QEMU) -c $< -o $@
+
+print_qemu.o: ../lib/print_qemu.c ../lib/print.h
+	$(CC) $(CFLAGS_QEMU) -c ../lib/print_qemu.c -o $@
+
+p2_qemu.elf: $(OBJS_QEMU) linker_qemu.ld
+	$(LD) $(CFLAGS_QEMU) $(OBJS_QEMU) $(LDFLAGS_QEMU) -o $@
+
+p2_qemu.bin: p2_qemu.elf
+	$(OBJCOPY) -O binary $< $@
+
+# ========================
+# CLEAN
+# ========================
+clean:
+	rm -f *.o *.elf *.bin *.map
+
+.PHONY: all clean runqemu
