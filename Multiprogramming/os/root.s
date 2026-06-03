@@ -69,7 +69,8 @@ hang:
 
 irq_handler:
     @ Save r0-r12/lr_irq + spsr_irq in an IRQ frame and call C scheduler.
-    sub sp, sp, #60
+    @ Reserve 64 bytes so the stack remains 8-byte aligned before calling C.
+    sub sp, sp, #64
     stmia sp, {r0-r12, lr}
     mrs r0, spsr
     str r0, [sp, #56]
@@ -78,5 +79,5 @@ irq_handler:
     ldr r0, [sp, #56]
     msr spsr_cxsf, r0
     ldmia sp, {r0-r12, lr}
-    add sp, sp, #60
+    add sp, sp, #64
     subs pc, lr, #4

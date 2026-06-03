@@ -29,8 +29,6 @@ void timer_irq_handler(uint32_t *irq_frame) {
     pcb_set_state(next_pcb, PROC_RUNNING);
 }
 
-typedef void (*entry_fn_t)(void);
-
 void kmain(void) {
     wdt_disable();
     uart_puts("\n[OS] boot (Modular RR)\n");
@@ -44,8 +42,7 @@ void kmain(void) {
     uart_puts("[OS] jumping to P1\n");
 
     pcb_t *current = scheduler_get_current_pcb();
-    write_svc_sp_lr(current->sp, current->lr);
-    ((entry_fn_t)(uintptr_t)current->pc)();
+    start_first_process(current->pc, current->sp, current->lr);
 
     for (;;) {
     }

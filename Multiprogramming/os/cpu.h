@@ -56,4 +56,18 @@ static inline void write_svc_sp_lr(uint32_t sp, uint32_t lr) {
     write_cpsr_c(old_cpsr);
 }
 
+static inline __attribute__((noreturn)) void start_first_process(uint32_t pc,
+                                                                 uint32_t sp,
+                                                                 uint32_t lr) {
+    __asm__ volatile (
+        "mov sp, %1\n\t"
+        "mov lr, %2\n\t"
+        "bx %0\n\t"
+        :
+        : "r"(pc), "r"(sp), "r"(lr)
+        : "memory");
+
+    __builtin_unreachable();
+}
+
 #endif

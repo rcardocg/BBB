@@ -85,7 +85,7 @@ p2_qemu.bin: p2_qemu.elf
 	$(OBJCOPY) -O binary $< $@
 
 run: all
-	$(QEMU) -M versatilepb -cpu cortex-a8 -nographic -kernel os_qemu.bin -device loader,file=p1_qemu.bin,addr=0x00020000 -device loader,file=p2_qemu.bin,addr=0x00030000
+	$(QEMU) -M versatilepb -cpu cortex-a8 -nographic -audio none -kernel os_qemu.bin -device loader,file=p1_qemu.bin,addr=0x00020000 -device loader,file=p2_qemu.bin,addr=0x00030000
 
 disasm: os_qemu.elf
 	$(OBJDUMP) -D os_qemu.elf > os_qemu.dis

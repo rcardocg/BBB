@@ -93,6 +93,19 @@ static void write_svc_sp_lr(u32 sp, u32 lr)
     write_cpsr_c(old_cpsr);
 }
 
+static __attribute__((noreturn)) void start_first_process(u32 pc, u32 sp, u32 lr)
+{
+    __asm__ volatile(
+        "mov sp, %1\n\t"
+        "mov lr, %2\n\t"
+        "bx %0\n\t"
+        :
+        : "r"(pc), "r"(sp), "r"(lr)
+        : "memory");
+
+    __builtin_unreachable();
+}
+
 static void uart_putc(char c)
 {
     while (mmio_read(UART0_BASE + UART_FR) & UART_FR_TXFF)
@@ -159,8 +172,6 @@ void timer_irq_handler(u32 *irq_frame)
     g_current_proc = next_proc;
 }
 
-typedef void (*entry_fn_t)(void);
-
 void kmain(void)
 {
     disable_wdt1();
@@ -174,8 +185,9 @@ void kmain(void)
 
     uart_puts("[OS] jumping to P1\n");
 
-    write_svc_sp_lr(g_pcbs[g_current_proc].sp, g_pcbs[g_current_proc].lr);
-    ((entry_fn_t)(uintptr_t)g_pcbs[g_current_proc].pc)();
+    start_first_process(g_pcbs[g_current_proc].pc,
+                        g_pcbs[g_current_proc].sp,
+                        g_pcbs[g_current_proc].lr);
 
     for (;;)
     {
