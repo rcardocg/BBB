@@ -1,23 +1,19 @@
 CROSS ?= arm-none-eabi
 QEMU := qemu-system-arm
 
-all: os_all p1 p2
+all: qemu beagle
 
-os_all:
-	$(MAKE) -C os CROSS=$(CROSS)
+qemu:
+	$(MAKE) -C qemu CROSS=$(CROSS) QEMU=$(QEMU)
 
-p1:
-	$(MAKE) -C P1 CROSS=$(CROSS)
+beagle:
+	$(MAKE) -C Beagle CROSS=$(CROSS)
 
-p2:
-	$(MAKE) -C P2 CROSS=$(CROSS)
-
-runqemu: all
-	$(QEMU) -M versatilepb -cpu cortex-a8 -nographic -kernel os/os_qemu.bin -device loader,file=P1/p1_qemu.bin,addr=0x00020000 -device loader,file=P2/p2_qemu.bin,addr=0x00030000
+runqemu:
+	$(MAKE) -C qemu CROSS=$(CROSS) QEMU=$(QEMU) run
 
 clean:
-	$(MAKE) -C os clean
-	$(MAKE) -C P1 clean
-	$(MAKE) -C P2 clean
+	$(MAKE) -C qemu clean
+	$(MAKE) -C Beagle clean
 
-.PHONY: all clean os_all p1 p2
+.PHONY: all clean qemu beagle runqemu
