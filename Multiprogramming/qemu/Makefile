@@ -86,13 +86,13 @@ os_qemu.bin: os_qemu.elf
 $(BUILD)/P1/start.o: $(ROOT)/P1/qemu/start.s | $(BUILD)/P1
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/P1/main.o: $(ROOT)/P1/main.c $(ROOT)/lib/print.h | $(BUILD)/P1
+$(BUILD)/P1/main.o: $(ROOT)/P1/main.c $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P1
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
 $(BUILD)/P1/print.o: $(ROOT)/lib/qemu/print.c $(ROOT)/lib/print.h | $(BUILD)/P1
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
-$(BUILD)/P1/syscall.o: $(ROOT)/lib/qemu/syscall.s | $(BUILD)/P1
+$(BUILD)/P1/syscall.o: $(ROOT)/lib/syscall.s | $(BUILD)/P1
 	$(CC) $(CFLAGS) -c $< -o $@
 
 p1_qemu.elf: $(P1_OBJS) $(ROOT)/P1/qemu/linker.ld
@@ -104,13 +104,13 @@ p1_qemu.bin: p1_qemu.elf
 $(BUILD)/P2/start.o: $(ROOT)/P2/qemu/start.s | $(BUILD)/P2
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/P2/main.o: $(ROOT)/P2/main.c $(ROOT)/lib/print.h | $(BUILD)/P2
+$(BUILD)/P2/main.o: $(ROOT)/P2/main.c $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P2
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
 $(BUILD)/P2/print.o: $(ROOT)/lib/qemu/print.c $(ROOT)/lib/print.h | $(BUILD)/P2
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
-$(BUILD)/P2/syscall.o: $(ROOT)/lib/qemu/syscall.s | $(BUILD)/P2
+$(BUILD)/P2/syscall.o: $(ROOT)/lib/syscall.s | $(BUILD)/P2
 	$(CC) $(CFLAGS) -c $< -o $@
 
 p2_qemu.elf: $(P2_OBJS) $(ROOT)/P2/qemu/linker.ld

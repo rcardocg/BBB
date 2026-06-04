@@ -26,5 +26,29 @@ pcb_t* scheduler_get_current_pcb(void) {
 }
 
 void scheduler_next(void) {
-    g_current_proc = (g_current_proc + 1u) % NUM_USER_PROCS;
+    uint32_t i;
+
+    for (i = 1u; i <= NUM_USER_PROCS; i = i + 1u) {
+        uint32_t candidate = (g_current_proc + i) % NUM_USER_PROCS;
+        if (g_pcbs[candidate].state != PROC_TERMINATED) {
+            g_current_proc = candidate;
+            return;
+        }
+    }
+}
+
+void scheduler_terminate_current(void) {
+    g_pcbs[g_current_proc].state = PROC_TERMINATED;
+}
+
+int scheduler_has_runnable(void) {
+    uint32_t i;
+
+    for (i = 0u; i < NUM_USER_PROCS; i = i + 1u) {
+        if (g_pcbs[i].state != PROC_TERMINATED) {
+            return 1;
+        }
+    }
+
+    return 0;
 }

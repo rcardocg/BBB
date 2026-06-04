@@ -14,6 +14,8 @@
 .extern __vectors_start
 .extern __irq_stack_top
 .extern __svc_stack_top
+.extern __abt_stack_top
+.extern __und_stack_top
 
 .section .vectors, "ax"
 .align 5
@@ -45,6 +47,18 @@ _start:
     msr cpsr_c, r1
     ldr sp, =__irq_stack_top
 
+    @ Abort stack
+    bic r1, r0, #0x1F
+    orr r1, r1, #0x17
+    msr cpsr_c, r1
+    ldr sp, =__abt_stack_top
+
+    @ Undefined stack
+    bic r1, r0, #0x1F
+    orr r1, r1, #0x1B
+    msr cpsr_c, r1
+    ldr sp, =__und_stack_top
+
     @ SVC stack
     bic r1, r0, #0x1F
     orr r1, r1, #0x13
@@ -70,7 +84,8 @@ hang:
     b hang
 
 undefined_handler:
-    b .
+    sub lr, lr, #4
+    b common_abort
 
 svc_handler:
     @ Save r0-r12/lr_svc + spsr_svc in a frame

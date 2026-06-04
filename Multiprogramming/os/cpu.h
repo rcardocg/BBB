@@ -33,20 +33,20 @@ static inline void enable_irq(void) {
  * del usuario desde un modo privilegiado.
  */
 static inline void cpu_get_user_regs(uint32_t *sp_out, uint32_t *lr_out) {
-    uint32_t old_cpsr = read_cpsr();
-    uint32_t sys_cpsr = (old_cpsr & ~0x1Fu) | 0x1Fu | 0x80u; // System mode, IRQ disabled
-    uint32_t sp_val, lr_val;
-
-    write_cpsr_c(sys_cpsr);
     __asm__ volatile (
-        "mov %0, sp\n\t"
-        "mov %1, lr\n\t"
-        : "=r"(sp_val), "=r"(lr_val)
-        :: "memory");
-    write_cpsr_c(old_cpsr);
-
-    *sp_out = sp_val;
-    *lr_out = lr_val;
+        "mrs r2, cpsr\n\t"
+        "bic r3, r2, #0x1F\n\t"
+        "orr r3, r3, #0x1F\n\t"
+        "orr r3, r3, #0x80\n\t"
+        "msr cpsr_c, r3\n\t"
+        "mov r3, sp\n\t"
+        "mov ip, lr\n\t"
+        "msr cpsr_c, r2\n\t"
+        "str r3, [%0]\n\t"
+        "str ip, [%1]\n\t"
+        :
+        : "r"(sp_out), "r"(lr_out)
+        : "r2", "r3", "ip", "cc", "memory");
 }
 
 /**

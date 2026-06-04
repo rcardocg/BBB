@@ -41,4 +41,6 @@ SECTIONS
 }
 
 __irq_stack_top = 0x0001F000;
+__abt_stack_top = 0x0001E800;
+__und_stack_top = 0x0001E000;
 __svc_stack_top = 0x0001F800;

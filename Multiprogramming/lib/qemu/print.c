@@ -1,104 +1,123 @@
 #include "print.h"
 #include <stdarg.h>
+#include <stdint.h>
 
 typedef unsigned int u32;
 
-#define MMIO32(addr) (*(volatile u32 *)(addr))
+#define PRINT_BUF_SIZE 96u
 
-// UART0 en VersatilePB (PL011)
-#define UART0_BASE    0x101f1000
+extern int32_t __sys_write(int32_t fd, const void *buf, u32 len);
 
-#define UART_DR       0x00    // Data Register
-#define UART_FR       0x18    // Flag Register
-
-#define UART_FR_TXFF  (1 << 5)  // Transmit FIFO Full
-
-static inline u32 mmio_read(u32 addr) {
-    return MMIO32(addr);
-}
-
-static inline void mmio_write(u32 addr, u32 value) {
-    MMIO32(addr) = value;
-}
-
-extern void __sys_write(char c);
-
-void uart_putc(char c) {
-    if (c == '\n') {
-        __sys_write('\r');
+static void buf_putc(char *buf, u32 *len, char c) {
+    if (*len < PRINT_BUF_SIZE) {
+        buf[*len] = c;
+        *len = *len + 1u;
     }
-    __sys_write(c);
 }
 
-void uart_puts(const char *s) {
+static void buf_puts(char *buf, u32 *len, const char *s) {
     while (*s) {
-        uart_putc(*s++);
+        if (*s == '\n') {
+            buf_putc(buf, len, '\r');
+        }
+        buf_putc(buf, len, *s++);
     }
 }
 
-static void uart_put_u32_dec(u32 value) {
-    char buf[10];
+static void buf_put_u32_dec(char *out, u32 *len, u32 value) {
+    char digits[10];
     u32 i = 0;
 
     if (value == 0) {
-        uart_putc('0');
+        buf_putc(out, len, '0');
         return;
     }
 
-    while (value > 0 && i < sizeof(buf)) {
-        buf[i++] = '0' + (value % 10);
+    while (value > 0 && i < sizeof(digits)) {
+        digits[i++] = (char)('0' + (value % 10));
         value /= 10;
     }
 
     while (i > 0) {
-        uart_putc(buf[--i]);
+        buf_putc(out, len, digits[--i]);
     }
+}
+
+void uart_putc(char c) {
+    char out[2];
+    u32 len = 0;
+
+    if (c == '\n') {
+        buf_putc(out, &len, '\r');
+    }
+    buf_putc(out, &len, c);
+    (void)__sys_write(1, out, len);
+}
+
+void uart_puts(const char *s) {
+    char out[PRINT_BUF_SIZE];
+    u32 len = 0;
+
+    buf_puts(out, &len, s);
+    (void)__sys_write(1, out, len);
 }
 
 void PRINT(const char *fmt, ...) {
     va_list ap;
-    va_start(ap, fmt);
-
+    char out[PRINT_BUF_SIZE];
+    u32 len = 0;
     const char *p = fmt;
+
+    va_start(ap, fmt);
 
     while (*p) {
         if (*p != '%') {
-            uart_putc(*p++);
+            if (*p == '\n') {
+                buf_putc(out, &len, '\r');
+            }
+            buf_putc(out, &len, *p++);
             continue;
         }
 
         p++;
 
         if (*p == '%') {
-            uart_putc('%');
+            buf_putc(out, &len, '%');
             p++;
             continue;
         }
 
         if (*p == 'd') {
             int v = va_arg(ap, int);
-            uart_put_u32_dec((u32)v);
+            buf_put_u32_dec(out, &len, (u32)v);
             p++;
             continue;
         }
 
         if (*p == 'c') {
             char c = (char)va_arg(ap, int);
-            uart_putc(c);
+            if (c == '\n') {
+                buf_putc(out, &len, '\r');
+            }
+            buf_putc(out, &len, c);
             p++;
             continue;
         }
 
         if (*p == 's') {
             const char *s = va_arg(ap, const char *);
-            uart_puts(s ? s : "(null)");
+            buf_puts(out, &len, s ? s : "(null)");
             p++;
             continue;
         }
 
-        uart_putc('%');
-        uart_putc(*p++);
+        buf_putc(out, &len, '%');
+        buf_putc(out, &len, *p++);
     }
 
     va_end(ap);
+
+    if (len > 0) {
+        (void)__sys_write(1, out, len);
+    }
 }

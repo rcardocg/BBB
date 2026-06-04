@@ -22,12 +22,14 @@ OS_OBJS := \
 P1_OBJS := \
 	$(BUILD)/P1/start.o \
 	$(BUILD)/P1/main.o \
-	$(BUILD)/P1/print.o
+	$(BUILD)/P1/print.o \
+	$(BUILD)/P1/syscall.o
 
 P2_OBJS := \
 	$(BUILD)/P2/start.o \
 	$(BUILD)/P2/main.o \
-	$(BUILD)/P2/print.o
+	$(BUILD)/P2/print.o \
+	$(BUILD)/P2/syscall.o
 
 all: os_beagle.bin p1_beagle.bin p2_beagle.bin
 
@@ -64,11 +66,14 @@ os_beagle.bin: os_beagle.elf
 $(BUILD)/P1/start.o: $(ROOT)/P1/beagle/start.s | $(BUILD)/P1
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/P1/main.o: $(ROOT)/P1/main.c $(ROOT)/lib/print.h | $(BUILD)/P1
+$(BUILD)/P1/main.o: $(ROOT)/P1/main.c $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P1
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
 $(BUILD)/P1/print.o: $(ROOT)/lib/beagle/print.c $(ROOT)/lib/print.h | $(BUILD)/P1
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P1/syscall.o: $(ROOT)/lib/syscall.s | $(BUILD)/P1
+	$(CC) $(CFLAGS) -c $< -o $@
 
 p1_beagle.elf: $(P1_OBJS) $(ROOT)/P1/beagle/linker.ld
 	$(LD) $(CFLAGS) $(P1_OBJS) -T $(ROOT)/P1/beagle/linker.ld $(LDFLAGS) -Wl,-Map=p1_beagle.map -o $@
@@ -79,11 +84,14 @@ p1_beagle.bin: p1_beagle.elf
 $(BUILD)/P2/start.o: $(ROOT)/P2/beagle/start.s | $(BUILD)/P2
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/P2/main.o: $(ROOT)/P2/main.c $(ROOT)/lib/print.h | $(BUILD)/P2
+$(BUILD)/P2/main.o: $(ROOT)/P2/main.c $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P2
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
 $(BUILD)/P2/print.o: $(ROOT)/lib/beagle/print.c $(ROOT)/lib/print.h | $(BUILD)/P2
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P2/syscall.o: $(ROOT)/lib/syscall.s | $(BUILD)/P2
+	$(CC) $(CFLAGS) -c $< -o $@
 
 p2_beagle.elf: $(P2_OBJS) $(ROOT)/P2/beagle/linker.ld
 	$(LD) $(CFLAGS) $(P2_OBJS) -T $(ROOT)/P2/beagle/linker.ld $(LDFLAGS) -Wl,-Map=p2_beagle.map -o $@

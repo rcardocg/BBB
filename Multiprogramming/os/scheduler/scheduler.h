@@ -6,5 +6,7 @@
 void scheduler_init(void);
 pcb_t* scheduler_get_current_pcb(void);
 void scheduler_next(void);
+void scheduler_terminate_current(void);
+int scheduler_has_runnable(void);
 
 #endif
