@@ -1,53 +1,39 @@
-# Mapa del Núcleo (os/os.c)
+# Mapa del Arquitectura (Fase 2)
 
-Este archivo actúa como el orquestador principal del sistema operativo. Tras la refactorización modular, su responsabilidad se limita a la inicialización del sistema y el manejo de alto nivel de las interrupciones de hardware.
+Este documento describe la arquitectura modular del sistema operativo tras la implementación de la Fase 2 (Aislamiento Kernel/Usuario).
 
-## 1. Dependencias (Módulos)
-El archivo `os.c` se conecta con los siguientes componentes:
-*   `pcb.h`: Estructura de Control de Procesos para guardar/restaurar estados.
-*   `cpu.h`: Funciones de bajo nivel para manipular registros del procesador ARM.
-*   `drivers/uart.h`: Salida de texto por consola serial.
-*   `drivers/wdt.h`: Control del Watchdog Timer.
-*   `drivers/timer.h`: Configuración del DMTimer2 y el controlador de interrupciones (INTC).
-*   `scheduler/scheduler.h`: Interfaz del planificador para decidir qué proceso sigue.
+## 1. Capas del Sistema
 
----
+### Capa de Abstracción de CPU (`os/cpu.h`)
+Responsable de todas las operaciones que dependen directamente de los modos de ejecución del ARMv7-A.
+*   `cpu_get_user_regs()` / `cpu_set_user_regs()`: Permiten al Kernel manipular los registros `sp` y `lr` del modo Usuario utilizando el modo **System (0x1F)**.
+*   `cpu_switch_to_user_mode()`: Realiza la transición protegida desde el Kernel (Supervisor) al primer proceso de Usuario (User).
 
-## 2. Variables y Tipos
-*   **`entry_fn_t` (typedef)**: Puntero a función de tipo `void(void)`. Se utiliza para castear la dirección de memoria del proceso (PC) y ejecutarlo como una función de C.
+### Capa de Gestión de Procesos (`os/qemu/os.c` y `os/pcb.c`)
+Orquestador del multitasking y los servicios del sistema.
+*   **Syscall Dispatcher**: Punto de entrada único para solicitudes del usuario (`svc #0`).
+    *   `SYS_WRITE` (R7=1): Servicio de impresión segura.
+    *   `SYS_YIELD` (R7=2): Cede voluntariamente el CPU.
+*   **Fault Handler**: Captura y reporta errores de ejecución (Abortos) para evitar el colapso del sistema.
 
----
-
-## 3. Funciones Principales
-
-### `timer_irq_handler(uint32_t *irq_frame)`
-Es el corazón del **Multitasking Preemptivo**. Se ejecuta automáticamente cada vez que el temporizador genera una interrupción.
-*   **Entrada**: `irq_frame`, un puntero al marco de registros (r0-r12, lr, spsr) guardados en el stack por `root.s`.
-*   **Flujo de Conexión**:
-    1.  **ACK**: Llama a `timer_ack_interrupt()` para limpiar la bandera de interrupción y permitir que ocurran futuras interrupciones.
-    2.  **Contexto SVC**: Usa `read_svc_sp_lr()` para obtener los registros `sp` y `lr` del modo Supervisor (donde corre el proceso de usuario).
-    3.  **Guardar**: Obtiene el proceso actual mediante `scheduler_get_current_pcb()` y guarda su estado completo usando `pcb_save_from_irq_frame()`.
-    4.  **Estado**: Cambia el estado del proceso actual a `PROC_READY`.
-    5.  **Decisión**: Llama a `scheduler_next()` para que el algoritmo (Round Robin) elija el siguiente proceso.
-    6.  **Restaurar**: Obtiene el nuevo proceso, restaura sus registros en el `irq_frame` y actualiza los registros SVC reales con `write_svc_sp_lr()`.
-    7.  **Ejecución**: Al terminar la función, `root.s` usará el `irq_frame` modificado para saltar al nuevo proceso.
-
-### `kmain(void)`
-Punto de entrada del Kernel después de que `root.s` inicializa el hardware básico.
-*   **Inicialización**:
-    *   `wdt_disable()`: Evita que la placa se reinicie sola.
-    *   `scheduler_init()`: Configura la tabla de procesos (PCBs) y sus puntos de entrada (P1, P2).
-    *   `timer_init()` y `intc_init()`: Activan el "latido" del sistema.
-    *   `enable_irq()`: Habilita las interrupciones a nivel global en el CPU.
-*   **Arranque del Primer Proceso**:
-    *   Obtiene el PCB del primer proceso (P1) mediante el planificador.
-    *   Configura su Stack Pointer (`sp`) y Link Register (`lr`) iniciales.
-    *   Realiza un salto directo a su dirección de entrada (`pc`).
+### Capa de Usuario (`P1/`, `P2/`, `lib/qemu/`)
+Código que se ejecuta sin privilegios.
+*   **Aislamiento**: No tiene acceso a MMIO ni a instrucciones privilegiadas.
+*   **Interrupción de Sistema**: Usa `lib/qemu/syscall.s` para solicitar servicios al Kernel.
 
 ---
 
-## 4. Flujo de Control
-1.  **Arranque**: `root.s` -> `kmain()` -> P1 inicia ejecución.
-2.  **Interrupción**: El Timer llega a cero -> El CPU salta a `root.s` (vector IRQ) -> `root.s` llama a `timer_irq_handler()`.
-3.  **Cambio**: `timer_irq_handler()` decide que es turno de P2 -> Modifica el stack de retorno.
-4.  **Retorno**: `root.s` restaura registros -> El CPU ahora está ejecutando P2 en lugar de P1.
+## 2. Flujo de una Syscall (Ejemplo: PRINT)
+1.  **Usuario**: Llama a `PRINT()`.
+2.  **Librería**: `uart_putc()` llama a `__sys_write()`.
+3.  **Trampa**: `svc #0` (con R7=1) causa una excepción de CPU.
+4.  **Vector**: El hardware salta a `svc_handler` en `root.s`.
+5.  **Kernel**: `syscall_dispatcher()` verifica R7 y escribe en la UART real.
+6.  **Retorno**: El Kernel restaura el estado y vuelve al usuario en modo no privilegiado.
+
+---
+
+## 3. Organización de Archivos
+*   `os/common/`: Lógica compartida (PCB, Scheduler).
+*   `os/qemu/`: Implementación específica para la plataforma virtual.
+*   `os/beagle/`: Implementación específica para hardware real (BBB).

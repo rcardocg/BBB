@@ -5,8 +5,10 @@
 .global _start
 .global irq_handler
 
-.extern kmain
-.extern timer_irq_handler
+.extern os_kmain
+.extern os_timer_irq_handler
+.extern os_syscall_dispatcher
+.extern os_fault_handler
 .extern __bss_start
 .extern __bss_end
 .extern __vectors_start
@@ -17,10 +19,10 @@
 .align 5
 __vectors_start:
     b _start          @ Reset
-    b .               @ Undefined
-    b .               @ SVC
-    b .               @ Prefetch abort
-    b .               @ Data abort
+    b undefined_handler
+    b svc_handler     @ SVC
+    b prefetch_handler @ Prefetch abort
+    b abort_handler    @ Data abort
     b .               @ Reserved
     b irq_handler     @ IRQ
     b .               @ FIQ
@@ -62,20 +64,53 @@ _start:
     dsb
     isb
 
-    bl kmain
+    bl os_kmain
 
 hang:
     b hang
 
-irq_handler:
-    @ Save r0-r12/lr_irq + spsr_irq in an IRQ frame and call C scheduler.
-    @ Reserve 64 bytes so the stack remains 8-byte aligned before calling C.
+undefined_handler:
+    b .
+
+svc_handler:
+    @ Save r0-r12/lr_svc + spsr_svc in a frame
     sub sp, sp, #64
     stmia sp, {r0-r12, lr}
     mrs r0, spsr
     str r0, [sp, #56]
     mov r0, sp
-    bl timer_irq_handler
+    bl os_syscall_dispatcher
+    ldr r0, [sp, #56]
+    msr spsr_cxsf, r0
+    ldmia sp, {r0-r12, lr}
+    add sp, sp, #64
+    movs pc, lr
+
+prefetch_handler:
+    sub lr, lr, #4
+    b common_abort
+
+abort_handler:
+    sub lr, lr, #8
+    b common_abort
+
+common_abort:
+    sub sp, sp, #64
+    stmia sp, {r0-r12, lr}
+    mrs r0, spsr
+    str r0, [sp, #56]
+    mov r0, sp
+    bl os_fault_handler
+    b .
+
+irq_handler:
+    @ Save r0-r12/lr_irq + spsr_irq in an IRQ frame and call C scheduler.
+    sub sp, sp, #64
+    stmia sp, {r0-r12, lr}
+    mrs r0, spsr
+    str r0, [sp, #56]
+    mov r0, sp
+    bl os_timer_irq_handler
     ldr r0, [sp, #56]
     msr spsr_cxsf, r0
     ldmia sp, {r0-r12, lr}

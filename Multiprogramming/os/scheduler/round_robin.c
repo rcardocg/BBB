@@ -9,7 +9,7 @@
 #define P1_PID 1u
 #define P2_PID 2u
 #define NUM_USER_PROCS 2u
-#define INITIAL_PROC_SPSR 0x13u
+#define INITIAL_PROC_SPSR 0x10u //0x13u es modo supervisor, 0x10 es privilegiado
 
 static pcb_t g_pcbs[NUM_USER_PROCS];
 static uint32_t g_current_proc;

@@ -21,17 +21,13 @@ static inline void mmio_write(u32 addr, u32 value) {
     MMIO32(addr) = value;
 }
 
+extern void __sys_write(char c);
+
 void uart_putc(char c) {
-    // newline fix
     if (c == '\n') {
-        uart_putc('\r');
+        __sys_write('\r');
     }
-
-    // esperar mientras FIFO está lleno
-    while (mmio_read(UART0_BASE + UART_FR) & UART_FR_TXFF) {
-    }
-
-    mmio_write(UART0_BASE + UART_DR, (u32)c);
+    __sys_write(c);
 }
 
 void uart_puts(const char *s) {

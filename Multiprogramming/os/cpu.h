@@ -3,68 +3,84 @@
 
 #include <stdint.h>
 
+/**
+ * @brief Lee el registro de estado actual (CPSR).
+ */
 static inline uint32_t read_cpsr(void) {
     uint32_t v;
     __asm__ volatile ("mrs %0, cpsr" : "=r"(v));
     return v;
 }
 
+/**
+ * @brief Escribe en los bits de control del CPSR.
+ */
 static inline void write_cpsr_c(uint32_t v) {
     __asm__ volatile ("msr cpsr_c, %0" :: "r"(v) : "cc", "memory");
 }
 
+/**
+ * @brief Habilita las interrupciones IRQ globalmente.
+ */
 static inline void enable_irq(void) {
     __asm__ volatile ("cpsie i" ::: "memory");
 }
 
-static inline void read_svc_sp_lr(uint32_t *sp_out, uint32_t *lr_out) {
-    uint32_t old_cpsr;
-    uint32_t svc_cpsr;
-    uint32_t sp_val;
-    uint32_t lr_val;
+/**
+ * @brief Obtiene los registros SP y LR del modo Usuario.
+ * 
+ * Utiliza el modo System (0x1F) para acceder a los registros mapeados
+ * del usuario desde un modo privilegiado.
+ */
+static inline void cpu_get_user_regs(uint32_t *sp_out, uint32_t *lr_out) {
+    uint32_t old_cpsr = read_cpsr();
+    uint32_t sys_cpsr = (old_cpsr & ~0x1Fu) | 0x1Fu | 0x80u; // System mode, IRQ disabled
+    uint32_t sp_val, lr_val;
 
-    old_cpsr = read_cpsr();
-    svc_cpsr = (old_cpsr & ~0x1Fu) | 0x13u | 0x80u;
-
-    write_cpsr_c(svc_cpsr);
+    write_cpsr_c(sys_cpsr);
     __asm__ volatile (
         "mov %0, sp\n\t"
         "mov %1, lr\n\t"
         : "=r"(sp_val), "=r"(lr_val)
-        :
-        : "memory");
+        :: "memory");
     write_cpsr_c(old_cpsr);
 
     *sp_out = sp_val;
     *lr_out = lr_val;
 }
 
-static inline void write_svc_sp_lr(uint32_t sp, uint32_t lr) {
-    uint32_t old_cpsr;
-    uint32_t svc_cpsr;
+/**
+ * @brief Establece los registros SP y LR del modo Usuario.
+ */
+static inline void cpu_set_user_regs(uint32_t sp, uint32_t lr) {
+    uint32_t old_cpsr = read_cpsr();
+    uint32_t sys_cpsr = (old_cpsr & ~0x1Fu) | 0x1Fu | 0x80u;
 
-    old_cpsr = read_cpsr();
-    svc_cpsr = (old_cpsr & ~0x1Fu) | 0x13u | 0x80u;
-
-    write_cpsr_c(svc_cpsr);
+    write_cpsr_c(sys_cpsr);
     __asm__ volatile (
         "mov sp, %0\n\t"
         "mov lr, %1\n\t"
-        :
-        : "r"(sp), "r"(lr)
+        :: "r"(sp), "r"(lr)
         : "memory");
     write_cpsr_c(old_cpsr);
 }
 
-static inline __attribute__((noreturn)) void start_first_process(uint32_t pc,
-                                                                 uint32_t sp,
-                                                                 uint32_t lr) {
+/**
+ * @brief Realiza el salto inicial al primer proceso en Modo Usuario.
+ * 
+ * Esta función prepara el SPSR para que al ejecutar 'movs pc, lr' el CPU 
+ * baje automáticamente a Modo Usuario (0x10).
+ */
+static inline __attribute__((noreturn)) void cpu_switch_to_user_mode(uint32_t pc,
+                                                                    uint32_t sp,
+                                                                    uint32_t lr) {
+    cpu_set_user_regs(sp, lr);
+    
     __asm__ volatile (
-        "mov sp, %1\n\t"
-        "mov lr, %2\n\t"
-        "bx %0\n\t"
-        :
-        : "r"(pc), "r"(sp), "r"(lr)
+        "msr spsr_cxsf, %1\n\t" // Preparamos modo Usuario (0x10)
+        "mov lr, %0\n\t"        // Cargamos PC de entrada
+        "movs pc, lr\n\t"       // Salto con cambio de modo
+        :: "r"(pc), "r"(0x10u)
         : "memory");
 
     __builtin_unreachable();

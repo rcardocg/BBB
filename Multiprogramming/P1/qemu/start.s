@@ -10,7 +10,6 @@
 _start:
     ldr sp, =_stack_top
     
-    cpsie i
     bl main
 1:
     b 1b

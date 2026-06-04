@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #include "pcb.h"
-
+#include "cpu.h"
 #include "timer.h"
 #include "intc.h"
 
@@ -21,7 +21,7 @@ typedef uint32_t u32;
 #define WDT_WWPS 0x34u
 #define WDT_WWPS_W_PEND (1u << 4)
 
-/* Process addresses (loaded by U-Boot) */
+/* Process addresses (loaded by loader) */
 #define P1_ENTRY 0x00020000u
 #define P2_ENTRY 0x00030000u
 #define P1_STACK_TOP 0x00030000u
@@ -30,81 +30,10 @@ typedef uint32_t u32;
 #define P1_PID 1u
 #define P2_PID 2u
 #define NUM_USER_PROCS 2u
-#define INITIAL_PROC_SPSR 0x13u
+#define INITIAL_PROC_SPSR 0x10u
 
 static inline void mmio_write(u32 addr, u32 value) { MMIO32(addr) = value; }
 static inline u32 mmio_read(u32 addr) { return MMIO32(addr); }
-
-static inline u32 read_cpsr(void)
-{
-    u32 v;
-    __asm__ volatile("mrs %0, cpsr" : "=r"(v));
-    return v;
-}
-
-static inline void write_cpsr_c(u32 v)
-{
-    __asm__ volatile("msr cpsr_c, %0" ::"r"(v) : "cc", "memory");
-}
-
-static inline void enable_irq(void)
-{
-    __asm__ volatile("cpsie i" ::: "memory");
-}
-
-static void read_svc_sp_lr(u32 *sp_out, u32 *lr_out)
-{
-    u32 old_cpsr;
-    u32 svc_cpsr;
-    u32 sp_val;
-    u32 lr_val;
-
-    old_cpsr = read_cpsr();
-    svc_cpsr = (old_cpsr & ~0x1Fu) | 0x13u | 0x80u;
-
-    write_cpsr_c(svc_cpsr);
-    __asm__ volatile(
-        "mov %0, sp\n\t"
-        "mov %1, lr\n\t"
-        : "=r"(sp_val), "=r"(lr_val)
-        :
-        : "memory");
-    write_cpsr_c(old_cpsr);
-
-    *sp_out = sp_val;
-    *lr_out = lr_val;
-}
-
-static void write_svc_sp_lr(u32 sp, u32 lr)
-{
-    u32 old_cpsr;
-    u32 svc_cpsr;
-
-    old_cpsr = read_cpsr();
-    svc_cpsr = (old_cpsr & ~0x1Fu) | 0x13u | 0x80u;
-
-    write_cpsr_c(svc_cpsr);
-    __asm__ volatile(
-        "mov sp, %0\n\t"
-        "mov lr, %1\n\t"
-        :
-        : "r"(sp), "r"(lr)
-        : "memory");
-    write_cpsr_c(old_cpsr);
-}
-
-static __attribute__((noreturn)) void start_first_process(u32 pc, u32 sp, u32 lr)
-{
-    __asm__ volatile(
-        "mov sp, %1\n\t"
-        "mov lr, %2\n\t"
-        "bx %0\n\t"
-        :
-        : "r"(pc), "r"(sp), "r"(lr)
-        : "memory");
-
-    __builtin_unreachable();
-}
 
 static void uart_putc(char c)
 {
@@ -142,6 +71,8 @@ static void disable_wdt1(void)
 static pcb_t g_pcbs[NUM_USER_PROCS];
 static u32 g_current_proc;
 
+void timer_irq_handler(u32 *irq_frame);
+
 static void pcb_system_init(void)
 {
     pcb_init(&g_pcbs[0], P1_PID, P1_ENTRY, P1_STACK_TOP, INITIAL_PROC_SPSR, PROC_RUNNING);
@@ -150,24 +81,53 @@ static void pcb_system_init(void)
     __asm__ volatile("dsb\n\tisb" ::: "memory");
 }
 
+void syscall_dispatcher(u32 *frame)
+{
+    u32 syscall_num = frame[7]; // R7
+
+    switch (syscall_num)
+    {
+    case 1: // SYS_WRITE
+        uart_putc((char)frame[0]);
+        break;
+    case 2: // SYS_YIELD
+        timer_irq_handler(frame);
+        break;
+    default:
+        uart_puts("\n[KERNEL] Unknown syscall\n");
+        break;
+    }
+}
+
+void fault_handler(u32 *frame)
+{
+    (void)frame;
+    uart_puts("\n\n**********************************");
+    uart_puts("\n[KERNEL] FATAL ERROR: PROCESS ABORT");
+    uart_puts("\n**********************************\n");
+    for (;;)
+    {
+    }
+}
+
 void timer_irq_handler(u32 *irq_frame)
 {
-    u32 svc_sp;
-    u32 svc_lr;
+    u32 usr_sp;
+    u32 usr_lr;
     u32 next_proc;
 
     /* ACK timer + EOI so interrupts continue */
     mmio_write(0x101E2000u + 0x0C, 1u); // clear timer interrupt
     mmio_write(0x10140000u + 0x30, 0u); // EOI VIC
 
-    read_svc_sp_lr(&svc_sp, &svc_lr);
-    pcb_save_from_irq_frame(&g_pcbs[g_current_proc], irq_frame, svc_sp, svc_lr);
+    cpu_get_user_regs(&usr_sp, &usr_lr);
+    pcb_save_from_irq_frame(&g_pcbs[g_current_proc], irq_frame, usr_sp, usr_lr);
     pcb_set_state(&g_pcbs[g_current_proc], PROC_READY);
 
     next_proc = (g_current_proc + 1u) % NUM_USER_PROCS;
 
-    pcb_restore_to_irq_frame(&g_pcbs[next_proc], irq_frame, &svc_sp, &svc_lr);
-    write_svc_sp_lr(svc_sp, svc_lr);
+    pcb_restore_to_irq_frame(&g_pcbs[next_proc], irq_frame, &usr_sp, &usr_lr);
+    cpu_set_user_regs(usr_sp, usr_lr);
     pcb_set_state(&g_pcbs[next_proc], PROC_RUNNING);
     g_current_proc = next_proc;
 }
@@ -185,9 +145,9 @@ void kmain(void)
 
     uart_puts("[OS] jumping to P1\n");
 
-    start_first_process(g_pcbs[g_current_proc].pc,
-                        g_pcbs[g_current_proc].sp,
-                        g_pcbs[g_current_proc].lr);
+    cpu_switch_to_user_mode(g_pcbs[g_current_proc].pc,
+                            g_pcbs[g_current_proc].sp,
+                            g_pcbs[g_current_proc].lr);
 
     for (;;)
     {

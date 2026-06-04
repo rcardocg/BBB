@@ -6,6 +6,15 @@
 #include "drivers/timer.h"
 #include "scheduler/scheduler.h"
 
+void syscall_dispatcher(uint32_t *frame) {
+    (void)frame;
+}
+
+void fault_handler(uint32_t *frame) {
+    (void)frame;
+    for(;;);
+}
+
 void timer_irq_handler(uint32_t *irq_frame) {
     uint32_t svc_sp;
     uint32_t svc_lr;
