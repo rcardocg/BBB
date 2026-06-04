@@ -15,10 +15,8 @@ void os_kmain(void) {
     timer_init();
     intc_init();
     
-    /* REGLA 3.4: No habilitamos IRQ manualmente aquí para evitar ticks prematuros. 
-       Se habilitarán automáticamente al entrar en USR modo (SPSR=0x10). */
-    
-    os_trace_mode_switch(g_pcbs[g_current_proc].pid, "initial_launch");
+    /* IRQ habilitadas al entrar a USR (SPSR=0x10). */
+    os_trace_mode_switch(g_pcbs[g_current_proc].pid, "KERNEL_TO_USER", "initial_launch", 0);
     
     cpu_switch_to_user_mode(g_pcbs[g_current_proc].pc, 
                             g_pcbs[g_current_proc].sp, 

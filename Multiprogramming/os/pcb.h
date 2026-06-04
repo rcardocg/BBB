@@ -16,7 +16,8 @@ typedef enum {
 
 typedef enum {
     PROC_READY = 0,
-    PROC_RUNNING = 1
+    PROC_RUNNING = 1,
+    PROC_TERMINATED = 2
 } proc_state_t;
 
 typedef struct {

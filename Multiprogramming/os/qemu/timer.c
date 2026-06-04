@@ -18,8 +18,8 @@ typedef uint32_t u32;
 #define TIMER_CTRL_INTEN    (1u << 5)
 #define TIMER_CTRL_32BIT    (1u << 1)
 
-/* Valor para la velocidad del RR */
-#define TIMER_RELOAD  10000u
+/* ~500ms a 24MHz (SP804 en versatilepb) */
+#define TIMER_RELOAD  12000000u
 
 static inline void mmio_write(u32 addr, u32 val) {
     MMIO32(addr) = val;

@@ -10,7 +10,7 @@ void os_timer_irq_handler(uint32_t *irq_frame) {
     uint32_t usr_sp, usr_lr;
     
     /* Trace: USER_TO_KERNEL (Interrupt Path) */
-    os_trace_mode_switch(g_pcbs[g_current_proc].pid, "timer_irq");
+    os_trace_mode_switch(g_pcbs[g_current_proc].pid, "USER_TO_KERNEL", "timer_irq", 0);
     
     /* ACK timer + EOI so interrupts continue */
     (*(volatile uint32_t *)(0x101E2000u + 0x0C)) = 1u;
@@ -27,5 +27,5 @@ void os_timer_irq_handler(uint32_t *irq_frame) {
     pcb_set_state(&g_pcbs[g_current_proc], PROC_RUNNING);
     
     /* Trace: KERNEL_TO_USER (Dispatch) */
-    os_trace_mode_switch(g_pcbs[g_current_proc].pid, "dispatch");
+    os_trace_mode_switch(g_pcbs[g_current_proc].pid, "KERNEL_TO_USER", "dispatch", 0);
 }

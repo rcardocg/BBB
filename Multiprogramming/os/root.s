@@ -78,8 +78,16 @@ svc_handler:
     stmia sp, {r0-r12, lr}
     mrs r0, spsr
     str r0, [sp, #56]
+    @ Adjust LR for IRQ-frame convention used by pcb_save/restore
+    ldr r0, [sp, #52]
+    add r0, r0, #4
+    str r0, [sp, #52]
     mov r0, sp
     bl os_syscall_dispatcher
+    @ Restore original LR for correct SVC return
+    ldr r0, [sp, #52]
+    sub r0, r0, #4
+    str r0, [sp, #52]
     ldr r0, [sp, #56]
     msr spsr_cxsf, r0
     ldmia sp, {r0-r12, lr}

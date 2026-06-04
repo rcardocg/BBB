@@ -24,11 +24,14 @@ void os_fault_handler(uint32_t *frame);
 /* Maneja la interrupción del timer. */
 void os_timer_irq_handler(uint32_t *irq_frame);
 
-/* Imprime rastro de cambio de modo. */
-void os_trace_mode_switch(uint32_t pid, const char *reason);
+/* Imprime rastro de cambio de modo (direccion: USER_TO_KERNEL o KERNEL_TO_USER). */
+void os_trace_mode_switch(uint32_t pid, const char *direction, const char *reason, const char *extra);
 
-/* Imprime rastro de fallo de proceso. */
+/* Imprime rastro de fallo (USER_TO_KERNEL fault type=...). */
 void os_trace_fault(uint32_t pid, const char *type);
+
+/* Maneja SYS_YIELD con cambio de contexto. */
+void os_handle_sys_yield(uint32_t *frame);
 
 /* Punto de entrada principal del Kernel. */
 void os_kmain(void);

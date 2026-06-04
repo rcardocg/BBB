@@ -1,9 +1,14 @@
 #include "cpu.h"
-/* Establece registros SP y LR de Usuario. Afecta: SP, LR (System). Deps: cpu_read_cpsr, cpu_write_cpsr_c. */
 void cpu_set_user_regs(uint32_t sp, uint32_t lr) {
-    uint32_t old_cpsr = cpu_read_cpsr();
-    uint32_t sys_cpsr = (old_cpsr & ~0x1Fu) | 0x1Fu | 0x80u;
-    cpu_write_cpsr_c(sys_cpsr);
-    __asm__ volatile ("mov sp, %0\n\tmov lr, %1" :: "r"(sp), "r"(lr) : "memory");
-    cpu_write_cpsr_c(old_cpsr);
+    __asm__ volatile (
+        "mrs r3, cpsr\n\t"
+        "bic r2, r3, #0x1F\n\t"
+        "orr r2, r2, #0x1F\n\t"
+        "orr r2, r2, #0x80\n\t"
+        "msr cpsr_c, r2\n\t"
+        "mov sp, %0\n\t"
+        "mov lr, %1\n\t"
+        "msr cpsr_c, r3\n\t"
+        :: "r"(sp), "r"(lr)
+        : "r2", "r3", "cc", "memory");
 }

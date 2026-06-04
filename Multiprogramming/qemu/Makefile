@@ -31,6 +31,7 @@ OS_OBJS := \
 	$(BUILD)/os/os_wdt_disable.o \
 	$(BUILD)/os/os_pcb_system_init.o \
 	$(BUILD)/os/os_syscall_dispatcher.o \
+	$(BUILD)/os/os_handle_sys_yield.o \
 	$(BUILD)/os/os_fault_handler.o \
 	$(BUILD)/os/os_timer_irq_handler.o \
 	$(BUILD)/os/os_trace_mode_switch.o \
