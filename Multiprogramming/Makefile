@@ -12,8 +12,10 @@ beagle:
 runqemu:
 	$(MAKE) -C qemu CROSS=$(CROSS) QEMU=$(QEMU) run
 
+qemurun: runqemu
+
 clean:
 	$(MAKE) -C qemu clean
 	$(MAKE) -C Beagle clean
 
-.PHONY: all clean qemu beagle runqemu
+.PHONY: all clean qemu beagle runqemu qemurun

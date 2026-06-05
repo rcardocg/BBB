@@ -22,12 +22,17 @@ OS_OBJS := \
 P1_OBJS := \
 	$(BUILD)/P1/start.o \
 	$(BUILD)/P1/main.o \
+	$(BUILD)/P1/p1_delay.o \
+	$(BUILD)/P1/p1_fault_demo.o \
+	$(BUILD)/P1/p1_run.o \
 	$(BUILD)/P1/print.o \
 	$(BUILD)/P1/syscall.o
 
 P2_OBJS := \
 	$(BUILD)/P2/start.o \
 	$(BUILD)/P2/main.o \
+	$(BUILD)/P2/p2_delay.o \
+	$(BUILD)/P2/p2_run.o \
 	$(BUILD)/P2/print.o \
 	$(BUILD)/P2/syscall.o
 
@@ -66,7 +71,16 @@ os_beagle.bin: os_beagle.elf
 $(BUILD)/P1/start.o: $(ROOT)/P1/beagle/start.s | $(BUILD)/P1
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/P1/main.o: $(ROOT)/P1/main.c $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P1
+$(BUILD)/P1/main.o: $(ROOT)/P1/main.c $(ROOT)/P1/p1.h | $(BUILD)/P1
+	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P1/p1_delay.o: $(ROOT)/P1/p1_delay.c $(ROOT)/P1/p1.h | $(BUILD)/P1
+	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P1/p1_fault_demo.o: $(ROOT)/P1/p1_fault_demo.c $(ROOT)/P1/p1.h $(ROOT)/lib/print.h | $(BUILD)/P1
+	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P1/p1_run.o: $(ROOT)/P1/p1_run.c $(ROOT)/P1/p1.h $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P1
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
 $(BUILD)/P1/print.o: $(ROOT)/lib/beagle/print.c $(ROOT)/lib/print.h | $(BUILD)/P1
@@ -84,7 +98,13 @@ p1_beagle.bin: p1_beagle.elf
 $(BUILD)/P2/start.o: $(ROOT)/P2/beagle/start.s | $(BUILD)/P2
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/P2/main.o: $(ROOT)/P2/main.c $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P2
+$(BUILD)/P2/main.o: $(ROOT)/P2/main.c $(ROOT)/P2/p2.h | $(BUILD)/P2
+	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P2/p2_delay.o: $(ROOT)/P2/p2_delay.c $(ROOT)/P2/p2.h | $(BUILD)/P2
+	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
+
+$(BUILD)/P2/p2_run.o: $(ROOT)/P2/p2_run.c $(ROOT)/P2/p2.h $(ROOT)/lib/print.h $(ROOT)/lib/user_syscalls.h | $(BUILD)/P2
 	$(CC) $(CFLAGS) -I$(ROOT)/lib -c $< -o $@
 
 $(BUILD)/P2/print.o: $(ROOT)/lib/beagle/print.c $(ROOT)/lib/print.h | $(BUILD)/P2
