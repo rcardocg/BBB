@@ -85,7 +85,18 @@ hang:
 
 undefined_handler:
     sub lr, lr, #4
-    b common_abort
+    sub sp, sp, #64
+    stmia sp, {r0-r12, lr}
+    mrs r0, spsr
+    str r0, [sp, #56]
+    mov r0, sp
+    mov r1, #0
+    bl os_fault_handler
+    ldr r0, [sp, #56]
+    msr spsr_cxsf, r0
+    ldmia sp, {r0-r12, lr}
+    add sp, sp, #64
+    subs pc, lr, #4
 
 svc_handler:
     @ Save r0-r12/lr_svc + spsr_svc in a frame
@@ -111,20 +122,33 @@ svc_handler:
 
 prefetch_handler:
     sub lr, lr, #4
-    b common_abort
-
-abort_handler:
-    sub lr, lr, #8
-    b common_abort
-
-common_abort:
     sub sp, sp, #64
     stmia sp, {r0-r12, lr}
     mrs r0, spsr
     str r0, [sp, #56]
     mov r0, sp
+    mov r1, #1
     bl os_fault_handler
-    b .
+    ldr r0, [sp, #56]
+    msr spsr_cxsf, r0
+    ldmia sp, {r0-r12, lr}
+    add sp, sp, #64
+    subs pc, lr, #4
+
+abort_handler:
+    sub lr, lr, #8
+    sub sp, sp, #64
+    stmia sp, {r0-r12, lr}
+    mrs r0, spsr
+    str r0, [sp, #56]
+    mov r0, sp
+    mov r1, #2
+    bl os_fault_handler
+    ldr r0, [sp, #56]
+    msr spsr_cxsf, r0
+    ldmia sp, {r0-r12, lr}
+    add sp, sp, #64
+    subs pc, lr, #4
 
 irq_handler:
     @ Save r0-r12/lr_irq + spsr_irq in an IRQ frame and call C scheduler.

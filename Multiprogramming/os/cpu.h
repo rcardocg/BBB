@@ -26,6 +26,18 @@ static inline void enable_irq(void) {
     __asm__ volatile ("cpsie i" ::: "memory");
 }
 
+static inline uint32_t cpu_read_dfsr(void) {
+    uint32_t v;
+    __asm__ volatile ("mrc p15, 0, %0, c5, c0, 0" : "=r"(v));
+    return v;
+}
+
+static inline uint32_t cpu_read_ifsr(void) {
+    uint32_t v;
+    __asm__ volatile ("mrc p15, 0, %0, c5, c0, 1" : "=r"(v));
+    return v;
+}
+
 /**
  * @brief Obtiene los registros SP y LR del modo Usuario.
  * 

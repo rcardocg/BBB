@@ -19,7 +19,7 @@ void os_pcb_system_init(void);
 void os_syscall_dispatcher(uint32_t *frame);
 
 /* Maneja los fallos del procesador. */
-void os_fault_handler(uint32_t *frame);
+void os_fault_handler(uint32_t *frame, uint32_t fault_type);
 
 /* Maneja la interrupción del timer. */
 void os_timer_irq_handler(uint32_t *irq_frame);

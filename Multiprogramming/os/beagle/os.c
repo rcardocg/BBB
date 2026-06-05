@@ -142,10 +142,28 @@ void os_syscall_dispatcher(uint32_t *frame) {
     trace_return(syscall_num, rc);
 }
 
-void os_fault_handler(uint32_t *frame) {
+static const char* decode_fsr(uint32_t fsr) {
+    uint32_t status = (fsr & 0xFu) | ((fsr & (1u << 10)) >> 6);
+    if (status == 0x1u) return "type=alignment";
+    if (status == 0x5u) return "type=translation_section";
+    if (status == 0x7u) return "type=translation_page";
+    if (status == 0xDu) return "type=permission_section";
+    if (status == 0xFu) return "type=permission_page";
+    return "type=unknown";
+}
+
+void os_fault_handler(uint32_t *frame, uint32_t fault_type) {
     (void)frame;
     pcb_t *current = scheduler_get_current_pcb();
-    os_trace_mode_switch(current->pid, "USER_TO_KERNEL", "fault", "type=abort");
+    const char *reason = "type=undefined";
+
+    if (fault_type == 1u) {
+        reason = decode_fsr(cpu_read_ifsr());
+    } else if (fault_type == 2u) {
+        reason = decode_fsr(cpu_read_dfsr());
+    }
+
+    os_trace_mode_switch(current->pid, "USER_TO_KERNEL", "fault", reason);
 
     scheduler_terminate_current();
 
@@ -157,20 +175,16 @@ void os_fault_handler(uint32_t *frame) {
 
     scheduler_next();
     {
+        uint32_t usr_sp;
+        uint32_t usr_lr;
         pcb_t *next_pcb = scheduler_get_current_pcb();
         os_trace_mode_switch(next_pcb->pid, "KERNEL_TO_USER", "fault_recovery", 0);
-        cpu_set_user_regs(next_pcb->sp, next_pcb->lr);
+        
+        pcb_restore_to_irq_frame(next_pcb, frame, &usr_sp, &usr_lr);
+        cpu_set_user_regs(usr_sp, usr_lr);
         pcb_set_state(next_pcb, PROC_RUNNING);
-        __asm__ volatile (
-            "msr spsr_cxsf, %0\n\t"
-            "mov lr, %1\n\t"
-            "movs pc, lr\n\t"
-            :
-            : "r"(next_pcb->spsr), "r"(next_pcb->pc)
-            : "memory");
-    }
-
-    for (;;) {
+        
+        return;
     }
 }
 
